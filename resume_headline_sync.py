@@ -1,17 +1,33 @@
-import undetected_chromedriver as uc
+try:
+    import undetected_chromedriver as uc
+    UC_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: undetected_chromedriver not available: {e}")
+    UC_AVAILABLE = False
+    
+from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import (
     StaleElementReferenceException,
     ElementNotInteractableException,
     TimeoutException
 )
 from selenium.webdriver.common.action_chains import ActionChains
-from fake_useragent import UserAgent
-from random_user_agent.user_agent import UserAgent as RandomUA
-from random_user_agent.params import SoftwareName, OperatingSystem
+from webdriver_manager.chrome import ChromeDriverManager
+
+try:
+    from fake_useragent import UserAgent
+    from random_user_agent.user_agent import UserAgent as RandomUA
+    from random_user_agent.params import SoftwareName, OperatingSystem
+    USER_AGENT_AVAILABLE = True
+except ImportError:
+    print("Warning: User agent libraries not available, using fallback")
+    USER_AGENT_AVAILABLE = False
+
 from dotenv import load_dotenv
 import os
 import time
@@ -34,25 +50,69 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def create_sample_env_file():
+    """Create a sample .env file for local development"""
+    sample_content = """# Naukri Profile Updater Environment Variables
+# Copy this file and rename it to .env, then fill in your actual credentials
+
+NAUKRI_EMAIL=your-email@example.com
+NAUKRI_PASSWORD=your-password-here
+
+# Note: Never commit the actual .env file to version control
+# The .env file should be listed in .gitignore
+"""
+    
+    try:
+        with open('.env.sample', 'w') as f:
+            f.write(sample_content)
+        logger.info("Created .env.sample file as a template")
+        logger.info("Copy .env.sample to .env and fill in your actual credentials")
+    except Exception as e:
+        logger.warning(f"Could not create .env.sample file: {e}")
+
 def load_credentials():
     """Load Naukri login credentials from environment variables or .env file"""
-    # First try to load from environment variables directly
+    
+    # Check if running in CI environment
+    is_ci = os.getenv('CI', 'false').lower() == 'true'
+    
+    # First try to load from environment variables directly (works for both CI and local)
     email = os.getenv('NAUKRI_EMAIL')
     password = os.getenv('NAUKRI_PASSWORD')
-
-    # If not found and not in CI environment, try loading from .env file
-    if (not email or not password) and not os.getenv('CI'):
-        logger.info("Credentials not found in environment, trying .env file")
-        load_dotenv()
-        email = os.getenv('NAUKRI_EMAIL')
-        password = os.getenv('NAUKRI_PASSWORD')
-
-    if not email or not password:
-        logger.error("Credentials not found in environment or .env file")
-        raise ValueError("Please set NAUKRI_EMAIL and NAUKRI_PASSWORD in environment variables or .env file")
     
-    logger.info("Credentials loaded successfully")
-    return email, password
+    if email and password:
+        logger.info("Credentials loaded from environment variables")
+        return email, password
+    
+    # If not in CI and credentials not found in environment, check for .env file
+    if not is_ci:
+        env_file_path = '.env'
+        if os.path.exists(env_file_path):
+            logger.info(f"Found .env file at {env_file_path}, loading credentials")
+            load_dotenv(env_file_path)
+            email = os.getenv('NAUKRI_EMAIL')
+            password = os.getenv('NAUKRI_PASSWORD')
+            
+            if email and password:
+                logger.info("Credentials loaded successfully from .env file")
+                return email, password
+            else:
+                logger.warning("Found .env file but credentials are missing or empty")
+        else:
+            logger.info("No .env file found in current directory")
+            # Create a sample .env file to help the user
+            create_sample_env_file()
+    
+    # If we reach here, credentials were not found
+    if is_ci:
+        logger.error("Running in CI environment but required secrets (NAUKRI_EMAIL, NAUKRI_PASSWORD) are not set")
+        raise ValueError("Please configure NAUKRI_EMAIL and NAUKRI_PASSWORD secrets in GitHub repository settings")
+    else:
+        logger.error("Credentials not found in environment variables or .env file")
+        logger.info("To fix this, either:")
+        logger.info("1. Create a .env file with NAUKRI_EMAIL and NAUKRI_PASSWORD")
+        logger.info("2. Set environment variables: export NAUKRI_EMAIL='...' && export NAUKRI_PASSWORD='...'")
+        raise ValueError("Please set NAUKRI_EMAIL and NAUKRI_PASSWORD in environment variables or .env file")
 
 def update_resume_headline():
     """Update the resume headline on Naukri profile"""
@@ -67,13 +127,12 @@ def update_resume_headline():
     # Check if running in CI environment
     is_ci = os.getenv('CI', 'false').lower() == 'true'
     
+    # Check availability of undetected chrome for this session
+    uc_available_local = UC_AVAILABLE
+    
     if is_ci:
         logger.info("Running in CI environment - using optimized settings")
-        # In CI, use regular selenium with enhanced anti-bot measures
-        from selenium import webdriver
-        from selenium.webdriver.chrome.service import Service
-        from webdriver_manager.chrome import ChromeDriverManager
-        
+        # In CI, use regular selenium with enhanced anti-bot measures        
         options = webdriver.ChromeOptions()
         options.add_argument('--headless')
         options.add_argument('--no-sandbox')
@@ -144,52 +203,70 @@ def update_resume_headline():
             pass  # Ignore if search fails
         
     else:
-        logger.info("Running in local environment - using undetected Chrome")
+        logger.info("Running in local environment")
+        
         # Generate random user agent for local development
-        try:
-            software_names = [SoftwareName.CHROME.value]
-            operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
-            user_agent_rotator = RandomUA(software_names=software_names, operating_systems=operating_systems, limit=100)
-            random_user_agent = user_agent_rotator.get_random_user_agent()
-        except:
-            # Fallback user agent if random generation fails
+        if USER_AGENT_AVAILABLE:
+            try:
+                software_names = [SoftwareName.CHROME.value]
+                operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
+                user_agent_rotator = RandomUA(software_names=software_names, operating_systems=operating_systems, limit=100)
+                random_user_agent = user_agent_rotator.get_random_user_agent()
+            except:
+                # Fallback user agent if random generation fails
+                random_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36'
+        else:
             random_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36'
         
-        # Configure undetected-chromedriver for local use
-        options = uc.ChromeOptions()
-        options.add_argument(f'--user-agent={random_user_agent}')
-        options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_argument('--disable-extensions')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--dns-prefetch-disable')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--disable-infobars')
-        options.add_argument('--lang=en-US')
-        options.add_argument('--disable-dev-shm-usage')
+        # Try undetected Chrome first if available
+        if uc_available_local:
+            logger.info("Using undetected Chrome for local environment")
+            try:
+                # Configure undetected-chromedriver for local use
+                options = uc.ChromeOptions()
+                options.add_argument(f'--user-agent={random_user_agent}')
+                options.add_argument('--disable-blink-features=AutomationControlled')
+                options.add_argument('--disable-extensions')
+                options.add_argument('--no-sandbox')
+                options.add_argument('--dns-prefetch-disable')
+                options.add_argument('--disable-gpu')
+                options.add_argument('--disable-infobars')
+                options.add_argument('--lang=en-US')
+                options.add_argument('--disable-dev-shm-usage')
+                
+                # Disable password saving prompt
+                prefs = {
+                    "credentials_enable_service": False,
+                    "profile.password_manager_enabled": False,
+                    "profile.default_content_setting_values.notifications": 2
+                }
+                options.add_experimental_option("prefs", prefs)
+                
+                # Random window size to avoid detection
+                widths = [1920, 1366, 1536, 1440, 1280]
+                heights = [1080, 768, 864, 900, 720]
+                random_width = random.choice(widths)
+                random_height = random.choice(heights)
+                options.add_argument(f'--window-size={random_width},{random_height}')
+                
+                if RUN_HEADLESS:
+                    logger.info("Running in headless mode")
+                    options.add_argument('--headless')
+                else:
+                    logger.info("Running in visible mode (not headless)")
+                
+                # Get Chrome major version
+                chrome_version = 139  # Set to your current Chrome version
+                driver = uc.Chrome(options=options, version_main=chrome_version)  # Use specific version
+                logger.info("Successfully initialized undetected Chrome")
+                
+            except Exception as e:
+                logger.warning(f"Failed to initialize undetected Chrome: {e}")
+                uc_available_local = False  # Mark as unavailable for this session
         
-        # Random window size to avoid detection
-        widths = [1920, 1366, 1536, 1440, 1280]
-        heights = [1080, 768, 864, 900, 720]
-        random_width = random.choice(widths)
-        random_height = random.choice(heights)
-        options.add_argument(f'--window-size={random_width},{random_height}')
-        
-        if RUN_HEADLESS:
-            logger.info("Running in headless mode")
-            options.add_argument('--headless')
-        else:
-            logger.info("Running in visible mode (not headless)")
-        
-        logger.info("Initializing undetected Chrome browser")
-        try:
-            driver = uc.Chrome(options=options, version_main=None)  # Auto-detect version
-        except Exception as e:
-            logger.warning(f"Failed to initialize undetected Chrome, falling back to regular Chrome: {e}")
-            # Fallback to regular Chrome if undetected fails
-            from selenium import webdriver
-            from selenium.webdriver.chrome.service import Service
-            from webdriver_manager.chrome import ChromeDriverManager
-            
+        # Fallback to regular Chrome if undetected is not available
+        if not uc_available_local:
+            logger.info("Using regular Chrome with enhanced anti-bot measures")
             chrome_options = webdriver.ChromeOptions()
             chrome_options.add_argument(f'--user-agent={random_user_agent}')
             chrome_options.add_argument('--disable-blink-features=AutomationControlled')
@@ -197,10 +274,27 @@ def update_resume_headline():
             chrome_options.add_argument('--no-sandbox')
             chrome_options.add_argument('--disable-dev-shm-usage')
             chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument('--disable-infobars')
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            chrome_options.add_experimental_option('useAutomationExtension', False)
+            
+            # Disable password saving prompt
+            prefs = {
+                "credentials_enable_service": False,
+                "profile.password_manager_enabled": False,
+                "profile.default_content_setting_values.notifications": 2
+            }
+            chrome_options.add_experimental_option("prefs", prefs)
+            
             if RUN_HEADLESS:
                 chrome_options.add_argument('--headless')
             
             driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+            
+            # Add anti-bot scripts for regular Chrome
+            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            driver.execute_script("Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]})")
+            driver.execute_script("Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']})")
     
     # Set random delay for wait time to mimic human behavior
     base_wait = WEBDRIVER_WAIT_TIME
@@ -592,124 +686,38 @@ def update_resume_headline():
             logger.error(f"Error updating headline text: {str(e)}")
             raise
             
-        # Save changes with enhanced error handling
+        # Save changes
         logger.info("Looking for Save button")
-        time.sleep(ANIMATION_WAIT_TIME * 2)  # Extra wait for any animations to complete
+        time.sleep(ANIMATION_WAIT_TIME)
         
-        # Try multiple save button strategies with retry mechanism
-        retry_count = 3
-        save_successful = False
-        
-        for attempt in range(retry_count):
-            try:
-                logger.info(f"Save attempt {attempt + 1}")
-                
-                # Try primary save button first
-                try:
-                    save_button = wait.until(EC.presence_of_element_located(
-                        (By.XPATH, SELECTORS['save_button'])))
-                    wait.until(EC.element_to_be_clickable((By.XPATH, SELECTORS['save_button'])))
-                    wait.until(EC.visibility_of(save_button))
-                    logger.info("Found primary Save button")
-                except TimeoutException:
-                    # Try alternative save buttons
-                    logger.info("Primary save button not found, trying alternatives")
-                    save_buttons = driver.find_elements(By.XPATH, SELECTORS['save_button_alt'])
-                    save_button = None
-                    for btn in save_buttons:
-                        try:
-                            if btn.is_displayed() and btn.is_enabled():
-                                save_button = btn
-                                logger.info("Found alternative Save button")
-                                break
-                        except:
-                            continue
-                
-                if save_button:
-                    # Ensure button is in view
-                    driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", save_button)
-                    time.sleep(ANIMATION_WAIT_TIME)
-                    
-                    # Try different click methods
-                    click_methods = [
-                        lambda: save_button.click(),
-                        lambda: driver.execute_script("arguments[0].click();", save_button),
-                        lambda: ActionChains(driver).move_to_element(save_button).click().perform()
-                    ]
-                    
-                    for method in click_methods:
-                        try:
-                            method()
-                            time.sleep(ANIMATION_WAIT_TIME)
-                            # Check if dialog disappeared or success indicator appeared
-                            try:
-                                wait.until_not(EC.presence_of_element_located((By.XPATH, SELECTORS['headline_dialog'])))
-                                save_successful = True
-                                logger.info("Save confirmed successful")
-                                
-                                # Wait for any animations or page refreshes
-                                time.sleep(ANIMATION_WAIT_TIME * 2)
-                                
-                                # First check for success message
-                                try:
-                                    success_message_xpath = "//div[text()='Success']//following-sibling::div[text()='Resume Headline has been successfully saved.']"
-                                    success_element = wait.until(
-                                        EC.presence_of_element_located((By.XPATH, success_message_xpath)),
-                                        message="Success message not found"
-                                    )
-                                    
-                                    if success_element.is_displayed():
-                                        logger.info("Success message found on page")
-                                        
-                                        # Now verify the headline text on the page matches what we set
-                                        try:
-                                            # Get the text of the headline on the profile page
-                                            headline_text_element = wait.until(
-                                                EC.presence_of_element_located((By.XPATH, 
-                                                f"{SELECTORS['headline_section']}//div[contains(@class, 'text')]"))
-                                            )
-                                            displayed_headline = headline_text_element.text.strip()
-                                            logger.info(f"Current headline on page: {displayed_headline}")
-                                            
-                                            # Compare with what we set
-                                            if RESUME_HEADLINE in displayed_headline:
-                                                logger.info("Resume headline verified - text matches what we set")
-                                                success_message = f"Update completed at {datetime.now()}"
-                                                print(success_message)
-                                                logger.info(success_message)
-                                                
-                                                # Close browser immediately after verification
-                                                logger.info("Closing browser...")
-                                                driver.quit()
-                                                logger.info("Browser closed successfully")
-                                                logger.info("=== Resume headline update completed ===\n")
-                                                return  # Exit function after successful update
-                                        except Exception as e:
-                                            logger.warning(f"Could not verify headline text: {str(e)}")
-                                except Exception as e:
-                                    logger.warning(f"Success message check failed: {str(e)}")
-                                
-                                break
-                            except TimeoutException:
-                                continue
-                        except:
-                            continue
-                    
-                    if save_successful:
-                        break
-                
-            except Exception as e:
-                if attempt == retry_count - 1:
-                    logger.error(f"All save attempts failed: {str(e)}")
-                    raise
-                logger.warning(f"Save attempt {attempt + 1} failed: {str(e)}, retrying...")
-                time.sleep(ANIMATION_WAIT_TIME)
+        try:
+            # Find save button
+            save_button = wait.until(EC.presence_of_element_located((By.XPATH, SELECTORS['save_button'])))
+            wait.until(EC.element_to_be_clickable((By.XPATH, SELECTORS['save_button'])))
+            wait.until(EC.visibility_of(save_button))
+            logger.info("Found Save button")
             
-            # Remove the redundant success verification that would happen after all attempts
-            if save_successful and attempt == retry_count - 1:
-                logger.info("Save completed on final attempt")
-                # Script will close browser in finally block
-                return
+            # Ensure button is in view
+            driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", save_button)
+            time.sleep(ANIMATION_WAIT_TIME)
+            
+            # Click save button once and exit immediately
+            save_button.click()
+            logger.info("Save button clicked")
+            
+            # Exit immediately after clicking save
+            success_message = f"Update completed at {datetime.now()}"
+            print(success_message)
+            logger.info(success_message)
+            logger.info("Closing browser...")
+            driver.quit()
+            logger.info("Browser closed successfully")
+            logger.info("=== Resume headline update completed ===\n")
+            return  # Exit function immediately after successful save
+            
+        except Exception as e:
+            logger.error(f"Save failed: {str(e)}")
+            raise  # Re-raise the exception to be handled by the outer try-except
         
     except Exception as e:
         logger.error(f"Error updating profile: {str(e)}")
