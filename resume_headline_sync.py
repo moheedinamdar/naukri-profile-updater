@@ -64,50 +64,113 @@ def update_resume_headline():
     # Setup Chrome options with anti-bot measures
     logger.info("Configuring Chrome browser options with anti-bot measures")
     
-    # Generate random user agent
-    software_names = [SoftwareName.CHROME.value]
-    operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
-    user_agent_rotator = RandomUA(software_names=software_names, operating_systems=operating_systems, limit=100)
-    random_user_agent = user_agent_rotator.get_random_user_agent()
+    # Check if running in CI environment
+    is_ci = os.getenv('CI', 'false').lower() == 'true'
     
-    # Configure undetected-chromedriver
-    options = uc.ChromeOptions()
-    options.add_argument(f'--user-agent={random_user_agent}')
-    options.add_argument('--disable-blink-features=AutomationControlled')
-    options.add_argument('--disable-extensions')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--dns-prefetch-disable')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--disable-infobars')
-    options.add_argument('--lang=en-US')
-    options.add_argument('--disable-dev-shm-usage')
-    
-    # Random window size to avoid detection
-    widths = [1920, 1366, 1536, 1440, 1280]
-    heights = [1080, 768, 864, 900, 720]
-    random_width = random.choice(widths)
-    random_height = random.choice(heights)
-    options.add_argument(f'--window-size={random_width},{random_height}')
-    
-    if RUN_HEADLESS:
-        logger.info("Running in headless mode")
+    if is_ci:
+        logger.info("Running in CI environment - using optimized settings")
+        # In CI, use regular selenium with enhanced anti-bot measures
+        from selenium import webdriver
+        from selenium.webdriver.chrome.service import Service
+        from webdriver_manager.chrome import ChromeDriverManager
+        
+        options = webdriver.ChromeOptions()
         options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--disable-extensions')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument('--disable-infobars')
+        options.add_argument('--lang=en-US')
+        options.add_argument('--window-size=1920,1080')
+        options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36')
+        
+        # Additional anti-bot options for CI
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        
+        logger.info("Initializing Chrome browser for CI environment")
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        
+        # Anti-bot scripts
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+            "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36'
+        })
+        
     else:
-        logger.info("Running in visible mode (not headless)")
-    
-    logger.info("Initializing undetected Chrome browser")
-    driver = uc.Chrome(options=options, version_main=117)  # Specify your Chrome version
+        logger.info("Running in local environment - using undetected Chrome")
+        # Generate random user agent for local development
+        try:
+            software_names = [SoftwareName.CHROME.value]
+            operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
+            user_agent_rotator = RandomUA(software_names=software_names, operating_systems=operating_systems, limit=100)
+            random_user_agent = user_agent_rotator.get_random_user_agent()
+        except:
+            # Fallback user agent if random generation fails
+            random_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36'
+        
+        # Configure undetected-chromedriver for local use
+        options = uc.ChromeOptions()
+        options.add_argument(f'--user-agent={random_user_agent}')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument('--disable-extensions')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--dns-prefetch-disable')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--disable-infobars')
+        options.add_argument('--lang=en-US')
+        options.add_argument('--disable-dev-shm-usage')
+        
+        # Random window size to avoid detection
+        widths = [1920, 1366, 1536, 1440, 1280]
+        heights = [1080, 768, 864, 900, 720]
+        random_width = random.choice(widths)
+        random_height = random.choice(heights)
+        options.add_argument(f'--window-size={random_width},{random_height}')
+        
+        if RUN_HEADLESS:
+            logger.info("Running in headless mode")
+            options.add_argument('--headless')
+        else:
+            logger.info("Running in visible mode (not headless)")
+        
+        logger.info("Initializing undetected Chrome browser")
+        try:
+            driver = uc.Chrome(options=options, version_main=None)  # Auto-detect version
+        except Exception as e:
+            logger.warning(f"Failed to initialize undetected Chrome, falling back to regular Chrome: {e}")
+            # Fallback to regular Chrome if undetected fails
+            from selenium import webdriver
+            from selenium.webdriver.chrome.service import Service
+            from webdriver_manager.chrome import ChromeDriverManager
+            
+            chrome_options = webdriver.ChromeOptions()
+            chrome_options.add_argument(f'--user-agent={random_user_agent}')
+            chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+            chrome_options.add_argument('--disable-extensions')
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+            chrome_options.add_argument('--disable-gpu')
+            if RUN_HEADLESS:
+                chrome_options.add_argument('--headless')
+            
+            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     
     # Set random delay for wait time to mimic human behavior
     base_wait = WEBDRIVER_WAIT_TIME
     random_wait = base_wait + random.uniform(1, 5)
     wait = WebDriverWait(driver, random_wait)
     
-    # Modify navigator.webdriver flag
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    # Modify navigator.webdriver flag if not already done
+    try:
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    except:
+        pass  # Ignore if already executed
     
     # Add random delays between actions
-    time.sleep(random.uniform(2, 5))
+    time.sleep(random.uniform(1, 3))
     
     logger.info("Chrome browser initialized successfully with anti-bot measures")
     
