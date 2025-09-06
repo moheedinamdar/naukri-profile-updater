@@ -68,17 +68,33 @@ The script will:
 
 ### Using GitHub Actions (Recommended):
 
-This repository includes a GitHub Actions workflow that automatically runs the updater every weekday (Monday to Friday) at 8:00 AM IST.
+This repository includes a GitHub Actions workflow that:
+- Runs every weekday (Monday to Friday) at 8:00 AM IST
+- Runs on every push to any branch
+- Can be triggered manually on any branch
 
 To set up:
 
 1. Fork or push this repository to your GitHub account
-2. Go to your repository's Settings → Environments → Create new environment (e.g., "production")
+2. Go to your repository's Settings → Environments → Create new environment (name it "dev")
 3. Add the following environment secrets:
    - `NAUKRI_EMAIL`: Your Naukri.com email address
    - `NAUKRI_PASSWORD`: Your Naukri.com password
 4. Configure environment protection rules and branch restrictions if needed
-5. The workflow will run automatically on schedule, or you can trigger it manually from the Actions tab
+
+### Running the GitHub Action Manually on Any Branch
+
+You can manually trigger the workflow on any branch:
+
+1. Go to your repository on GitHub
+2. Click on the "Actions" tab
+3. Select the "Naukri Profile Update" workflow from the left sidebar
+4. Click the "Run workflow" dropdown button
+5. Select the branch you want to run the workflow on
+6. Optionally, provide a reason for the manual run
+7. Click "Run workflow"
+
+This is useful for testing your changes before merging to the main branch.
 
 ### On macOS/Linux (using cron):
 
