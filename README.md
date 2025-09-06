@@ -66,6 +66,19 @@ The script will:
 
 ## Scheduling Regular Updates
 
+### Using GitHub Actions (Recommended):
+
+This repository includes a GitHub Actions workflow that automatically runs the updater every Monday at 9:00 AM UTC.
+
+To set up:
+
+1. Fork or push this repository to your GitHub account
+2. Go to your repository's Settings → Secrets and variables → Actions
+3. Add the following repository secrets:
+   - `NAUKRI_EMAIL`: Your Naukri.com email address
+   - `NAUKRI_PASSWORD`: Your Naukri.com password
+4. The workflow will run automatically on schedule, or you can trigger it manually from the Actions tab
+
 ### On macOS/Linux (using cron):
 
 1. Open your crontab:
