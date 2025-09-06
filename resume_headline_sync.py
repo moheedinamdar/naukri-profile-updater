@@ -1,8 +1,7 @@
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import (
     StaleElementReferenceException,
@@ -10,10 +9,13 @@ from selenium.common.exceptions import (
     TimeoutException
 )
 from selenium.webdriver.common.action_chains import ActionChains
-from webdriver_manager.chrome import ChromeDriverManager
+from fake_useragent import UserAgent
+from random_user_agent.user_agent import UserAgent as RandomUA
+from random_user_agent.params import SoftwareName, OperatingSystem
 from dotenv import load_dotenv
 import os
 import time
+import random
 from datetime import datetime
 import logging
 from variables import (
@@ -59,46 +61,116 @@ def update_resume_headline():
     # Log the headline that will be used
     logger.info(f"Resume headline to be set: {RESUME_HEADLINE}")
     
-    # Setup Chrome options
-    logger.info("Configuring Chrome browser options")
-    chrome_options = webdriver.ChromeOptions()
-    for option, value in CHROME_OPTIONS.items():
-        # Only add headless option if RUN_HEADLESS is True
-        if option == 'headless' and not RUN_HEADLESS:
-            logger.info("Running in visible mode (not headless)")
-            continue
-        chrome_options.add_argument(value)
+    # Setup Chrome options with anti-bot measures
+    logger.info("Configuring Chrome browser options with anti-bot measures")
+    
+    # Generate random user agent
+    software_names = [SoftwareName.CHROME.value]
+    operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]
+    user_agent_rotator = RandomUA(software_names=software_names, operating_systems=operating_systems, limit=100)
+    random_user_agent = user_agent_rotator.get_random_user_agent()
+    
+    # Configure undetected-chromedriver
+    options = uc.ChromeOptions()
+    options.add_argument(f'--user-agent={random_user_agent}')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_argument('--disable-extensions')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--dns-prefetch-disable')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--disable-infobars')
+    options.add_argument('--lang=en-US')
+    options.add_argument('--disable-dev-shm-usage')
+    
+    # Random window size to avoid detection
+    widths = [1920, 1366, 1536, 1440, 1280]
+    heights = [1080, 768, 864, 900, 720]
+    random_width = random.choice(widths)
+    random_height = random.choice(heights)
+    options.add_argument(f'--window-size={random_width},{random_height}')
     
     if RUN_HEADLESS:
         logger.info("Running in headless mode")
+        options.add_argument('--headless')
+    else:
+        logger.info("Running in visible mode (not headless)")
     
-    logger.info("Initializing Chrome browser")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-    wait = WebDriverWait(driver, WEBDRIVER_WAIT_TIME)
-    logger.info("Chrome browser initialized successfully")
+    logger.info("Initializing undetected Chrome browser")
+    driver = uc.Chrome(options=options, version_main=117)  # Specify your Chrome version
+    
+    # Set random delay for wait time to mimic human behavior
+    base_wait = WEBDRIVER_WAIT_TIME
+    random_wait = base_wait + random.uniform(1, 5)
+    wait = WebDriverWait(driver, random_wait)
+    
+    # Modify navigator.webdriver flag
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    
+    # Add random delays between actions
+    time.sleep(random.uniform(2, 5))
+    
+    logger.info("Chrome browser initialized successfully with anti-bot measures")
     
     try:
         # Load credentials and login
         email, password = load_credentials()
         driver.get(NAUKRI_LOGIN_URL)
         
-        # Login with enhanced waits
+        # Login with human-like behavior
+        def human_type(element, text):
+            for char in text:
+                element.send_keys(char)
+                time.sleep(random.uniform(0.1, 0.3))  # Random delay between keystrokes
+                
+        def move_and_click(element, driver):
+            actions = ActionChains(driver)
+            # Move to a random position first
+            random_x = random.randint(-100, 100)
+            random_y = random.randint(-100, 100)
+            actions.move_by_offset(random_x, random_y)
+            # Then move to the element
+            actions.move_to_element(element)
+            # Add small random offset
+            actions.move_by_offset(random.randint(-5, 5), random.randint(-5, 5))
+            actions.click()
+            actions.perform()
+            time.sleep(random.uniform(0.5, 1.5))
+            
+        # Simulate human-like login behavior
         username_field = wait.until(EC.presence_of_element_located((By.XPATH, SELECTORS['username_field'])))
         wait.until(EC.element_to_be_clickable((By.XPATH, SELECTORS['username_field'])))
         wait.until(EC.visibility_of(username_field))
+        
+        # Move mouse naturally and click
+        move_and_click(username_field, driver)
         username_field.clear()
-        username_field.send_keys(email)
+        time.sleep(random.uniform(0.5, 1.0))
+        human_type(username_field, email)
+        
+        # Random delay before moving to password
+        time.sleep(random.uniform(1.0, 2.0))
         
         password_field = wait.until(EC.presence_of_element_located((By.XPATH, SELECTORS['password_field'])))
         wait.until(EC.element_to_be_clickable((By.XPATH, SELECTORS['password_field'])))
         wait.until(EC.visibility_of(password_field))
+        
+        move_and_click(password_field, driver)
         password_field.clear()
-        password_field.send_keys(password)
+        time.sleep(random.uniform(0.5, 1.0))
+        human_type(password_field, password)
+        
+        # Random delay before clicking login
+        time.sleep(random.uniform(1.0, 2.0))
         
         login_button = wait.until(EC.presence_of_element_located((By.XPATH, SELECTORS['login_button'])))
         wait.until(EC.element_to_be_clickable((By.XPATH, SELECTORS['login_button'])))
         wait.until(EC.visibility_of(login_button))
-        login_button.click()
+        
+        # Move mouse naturally to login button and click
+        move_and_click(login_button, driver)
+        
+        # Add random delay after login attempt
+        time.sleep(random.uniform(2.0, 4.0))
         
         # Wait for login to complete and verify
         time.sleep(LOGIN_WAIT_TIME)
