@@ -86,18 +86,62 @@ def update_resume_headline():
         options.add_argument('--window-size=1920,1080')
         options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36')
         
-        # Additional anti-bot options for CI
+        # Enhanced anti-bot options for CI
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
+        options.add_argument('--disable-web-security')
+        options.add_argument('--allow-running-insecure-content')
+        options.add_argument('--disable-features=VizDisplayCompositor')
+        
+        # Add more realistic browser profile settings
+        prefs = {
+            "profile.default_content_setting_values": {
+                "notifications": 2,
+                "geolocation": 2,
+                "media_stream": 2,
+            },
+            "profile.managed_default_content_settings": {
+                "images": 1
+            },
+            "profile.default_content_settings": {
+                "popups": 0
+            }
+        }
+        options.add_experimental_option("prefs", prefs)
         
         logger.info("Initializing Chrome browser for CI environment")
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
         
-        # Anti-bot scripts
+        # Enhanced anti-bot scripts for CI
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        driver.execute_script("Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]})")
+        driver.execute_script("Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']})")
         driver.execute_cdp_cmd('Network.setUserAgentOverride', {
             "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36'
         })
+        
+        # Set additional properties to look more human
+        driver.execute_script("""
+            Object.defineProperty(navigator, 'permissions', {
+                get: () => ({
+                    query: () => Promise.resolve({ state: 'granted' })
+                })
+            });
+        """)
+        
+        # Visit Google first to build session history
+        logger.info("Building session history...")
+        driver.get('https://www.google.com')
+        time.sleep(random.uniform(2, 4))
+        
+        # Search for something to make it look more natural
+        try:
+            search_box = driver.find_element(By.NAME, 'q')
+            search_box.send_keys('naukri jobs')
+            search_box.send_keys(Keys.RETURN)
+            time.sleep(random.uniform(3, 5))
+        except:
+            pass  # Ignore if search fails
         
     else:
         logger.info("Running in local environment - using undetected Chrome")
@@ -259,6 +303,144 @@ def update_resume_headline():
         
         # Add random delay after login attempt
         time.sleep(random.uniform(2.0, 4.0))
+        
+        # Check for CAPTCHA or other challenges
+        logger.info("Checking for CAPTCHA or login challenges...")
+        
+        # Wait a bit longer to see what happens after login
+        time.sleep(5)
+        
+        # Check for various CAPTCHA types and challenges
+        captcha_detected = False
+        captcha_selectors = [
+            "//div[contains(@class, 'captcha')]",
+            "//div[contains(@class, 'recaptcha')]", 
+            "//iframe[contains(@src, 'recaptcha')]",
+            "//div[contains(text(), 'verify')]",
+            "//div[contains(text(), 'robot')]",
+            "//div[contains(text(), 'human')]",
+            "//div[contains(text(), 'security')]",
+            "//div[contains(text(), 'challenge')]",
+            "//canvas[@id='captchaCanvas']",
+            "//img[contains(@alt, 'captcha')]",
+            "//div[@id='challenge']",
+            "//form[contains(@class, 'captcha')]"
+        ]
+        
+        for selector in captcha_selectors:
+            try:
+                captcha_element = driver.find_element(By.XPATH, selector)
+                if captcha_element.is_displayed():
+                    captcha_detected = True
+                    logger.warning(f"CAPTCHA detected with selector: {selector}")
+                    break
+            except:
+                continue
+        
+        # Additional checks for login failure indicators
+        login_error_selectors = [
+            "//div[contains(text(), 'Invalid')]",
+            "//div[contains(text(), 'incorrect')]",
+            "//div[contains(text(), 'failed')]",
+            "//div[contains(@class, 'error')]",
+            "//span[contains(@class, 'error')]"
+        ]
+        
+        login_error = False
+        for selector in login_error_selectors:
+            try:
+                error_element = driver.find_element(By.XPATH, selector)
+                if error_element.is_displayed():
+                    login_error = True
+                    logger.warning(f"Login error detected: {error_element.text}")
+                    break
+            except:
+                continue
+        
+        if captcha_detected:
+            logger.warning("CAPTCHA challenge detected - implementing workarounds...")
+            
+            # Strategy 1: Wait for manual resolution in non-CI environments
+            if not is_ci:
+                logger.info("Running locally - waiting for manual CAPTCHA resolution...")
+                logger.info("Please solve the CAPTCHA manually in the browser window")
+                
+                # Wait up to 2 minutes for CAPTCHA to be resolved
+                captcha_timeout = 120
+                start_time = time.time()
+                
+                while time.time() - start_time < captcha_timeout:
+                    try:
+                        # Check if we've moved past the login page
+                        current_url = driver.current_url
+                        if 'login' not in current_url.lower():
+                            logger.info("CAPTCHA appears to be resolved - continuing...")
+                            break
+                        
+                        # Check if CAPTCHA is still visible
+                        captcha_still_present = False
+                        for selector in captcha_selectors:
+                            try:
+                                captcha_element = driver.find_element(By.XPATH, selector)
+                                if captcha_element.is_displayed():
+                                    captcha_still_present = True
+                                    break
+                            except:
+                                continue
+                        
+                        if not captcha_still_present:
+                            logger.info("CAPTCHA no longer detected - continuing...")
+                            break
+                            
+                        time.sleep(2)
+                        
+                    except Exception as e:
+                        logger.debug(f"Error during CAPTCHA wait: {e}")
+                        time.sleep(2)
+                
+                if time.time() - start_time >= captcha_timeout:
+                    logger.error("CAPTCHA resolution timeout - manual intervention required")
+                    
+            else:
+                # Strategy 2: In CI, try alternative approaches
+                logger.warning("CAPTCHA detected in CI environment - trying alternative strategies...")
+                
+                # Try refreshing and retrying with different timing
+                time.sleep(random.uniform(3, 7))
+                
+                # Check if we can proceed anyway
+                try:
+                    # Sometimes the login succeeds despite CAPTCHA appearance
+                    driver.get(NAUKRI_PROFILE_URL)
+                    time.sleep(5)
+                    
+                    # Check if we can access profile page
+                    try:
+                        profile_indicator = wait.until(
+                            EC.presence_of_element_located((By.XPATH, SELECTORS['headline_section'])), 
+                            timeout=10
+                        )
+                        logger.info("Successfully bypassed CAPTCHA - profile page accessible")
+                    except TimeoutException:
+                        logger.error("CAPTCHA blocking access - profile page not accessible")
+                        # Take screenshot for debugging
+                        try:
+                            driver.save_screenshot("screenshots/captcha_blocked.png")
+                            logger.info("Screenshot saved: captcha_blocked.png")
+                        except:
+                            pass
+                        raise Exception("CAPTCHA challenge cannot be resolved in CI environment")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to bypass CAPTCHA: {e}")
+                    raise
+        
+        elif login_error:
+            logger.error("Login failed due to credentials or other error")
+            raise Exception("Login failed - check credentials")
+        
+        else:
+            logger.info("No CAPTCHA detected - proceeding with normal flow")
         
         # Wait for login to complete and verify
         time.sleep(LOGIN_WAIT_TIME)
