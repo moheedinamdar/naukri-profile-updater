@@ -63,15 +63,11 @@ jobs:
         echo "Adding anti-bot detection to variables.py"
         sed -i "s/'user_agent': '--user-agent=Mozilla\/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/116.0.0.0 Safari\/537.36'/'user_agent': '--user-agent=Mozilla\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/116.0.0.0 Safari\/537.36',\n    'disable_blink_features': '--disable-blink-features=AutomationControlled',\n    'excludeSwitches': '--disable-extensions'/" variables.py
     
-    - name: Set up environment variables
-      run: |
-        echo "NAUKRI_EMAIL=${{ secrets.NAUKRI_EMAIL }}" >> $GITHUB_ENV
-        echo "NAUKRI_PASSWORD=${{ secrets.NAUKRI_PASSWORD }}" >> $GITHUB_ENV
-    
     - name: Run with Xvfb
       env:
         NAUKRI_EMAIL: ${{ secrets.NAUKRI_EMAIL }}
         NAUKRI_PASSWORD: ${{ secrets.NAUKRI_PASSWORD }}
+        CI: true
         DISPLAY: :99
       run: |
         # Log trigger event information

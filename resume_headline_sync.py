@@ -33,14 +33,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def load_credentials():
-    """Load Naukri login credentials from environment variables"""
-    logger.info("Loading credentials from .env file")
-    load_dotenv()
+    """Load Naukri login credentials from environment variables or .env file"""
+    # First try to load from environment variables directly
     email = os.getenv('NAUKRI_EMAIL')
     password = os.getenv('NAUKRI_PASSWORD')
+
+    # If not found and not in CI environment, try loading from .env file
+    if (not email or not password) and not os.getenv('CI'):
+        logger.info("Credentials not found in environment, trying .env file")
+        load_dotenv()
+        email = os.getenv('NAUKRI_EMAIL')
+        password = os.getenv('NAUKRI_PASSWORD')
+
     if not email or not password:
-        logger.error("Credentials not found in .env file")
-        raise ValueError("Please set NAUKRI_EMAIL and NAUKRI_PASSWORD in .env file")
+        logger.error("Credentials not found in environment or .env file")
+        raise ValueError("Please set NAUKRI_EMAIL and NAUKRI_PASSWORD in environment variables or .env file")
+    
     logger.info("Credentials loaded successfully")
     return email, password
 
