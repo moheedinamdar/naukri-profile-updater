@@ -4,13 +4,22 @@ on:
   schedule:
     # Runs every weekday (Monday to Friday) at 8:00 AM IST (2:30 AM UTC)
     - cron: '30 2 * * 1-5'
+  push:
+    # Run on any push to any branch
+    branches:
+      - '**'
   workflow_dispatch:
     # Allows manual triggering of the workflow
+    inputs:
+      reason:
+        description: 'Reason for manual run'
+        required: false
+        default: 'Manual profile update'
 
 jobs:
   update-profile:
     runs-on: ubuntu-latest
-    environment: production
+    environment: dev
     
     steps:
     - name: Checkout repository
@@ -43,4 +52,12 @@ jobs:
         NAUKRI_EMAIL: ${{ secrets.NAUKRI_EMAIL }}
         NAUKRI_PASSWORD: ${{ secrets.NAUKRI_PASSWORD }}
       run: |
+        # Log trigger event information
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          echo "Manual run triggered. Reason: ${{ github.event.inputs.reason || 'No reason provided' }}"
+        elif [ "${{ github.event_name }}" == "push" ]; then
+          echo "Triggered by push to branch: ${{ github.ref_name }}"
+        else
+          echo "Triggered by scheduled event"
+        fi
         python resume_headline_sync.py
