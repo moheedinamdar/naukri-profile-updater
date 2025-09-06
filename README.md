@@ -68,16 +68,17 @@ The script will:
 
 ### Using GitHub Actions (Recommended):
 
-This repository includes a GitHub Actions workflow that automatically runs the updater every Monday at 9:00 AM UTC.
+This repository includes a GitHub Actions workflow that automatically runs the updater every weekday (Monday to Friday) at 8:00 AM IST.
 
 To set up:
 
 1. Fork or push this repository to your GitHub account
-2. Go to your repository's Settings → Secrets and variables → Actions
-3. Add the following repository secrets:
+2. Go to your repository's Settings → Environments → Create new environment (e.g., "production")
+3. Add the following environment secrets:
    - `NAUKRI_EMAIL`: Your Naukri.com email address
    - `NAUKRI_PASSWORD`: Your Naukri.com password
-4. The workflow will run automatically on schedule, or you can trigger it manually from the Actions tab
+4. Configure environment protection rules and branch restrictions if needed
+5. The workflow will run automatically on schedule, or you can trigger it manually from the Actions tab
 
 ### On macOS/Linux (using cron):
 
