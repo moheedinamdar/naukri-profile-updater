@@ -1,0 +1,85 @@
+name: Naukri Profile Update
+
+on:
+  schedule:
+    # Runs every weekday (Monday to Friday) at 8:00 AM IST (2:30 AM UTC)
+    - cron: '30 2 * * 1-5'
+  push:
+    # Run on any push to any branch
+    branches:
+      - '**'
+  workflow_dispatch:
+    # Allows manual triggering of the workflow
+    inputs:
+      reason:
+        description: 'Reason for manual run'
+        required: false
+        default: 'Manual profile update'
+
+jobs:
+  update-profile:
+    runs-on: ubuntu-latest
+    environment: dev
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    
+    - name: Install Chrome
+      run: |
+        wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+        google-chrome --version
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    
+    - name: Create screenshot directory
+      run: mkdir -p screenshots
+    
+    - name: Modify variables for GitHub Actions
+      run: |
+        echo "Modifying variables.py to optimize for GitHub Actions..."
+        sed -i 's/RUN_HEADLESS = True/RUN_HEADLESS = False/' variables.py
+        sed -i 's/WEBDRIVER_WAIT_TIME = 30/WEBDRIVER_WAIT_TIME = 60/' variables.py
+        sed -i 's/LOGIN_WAIT_TIME = 5/LOGIN_WAIT_TIME = 15/' variables.py
+        sed -i 's/PAGE_LOAD_WAIT_TIME = 5/PAGE_LOAD_WAIT_TIME = 15/' variables.py
+        
+        # Add additional chrome options for CI environment
+        echo "Adding anti-bot detection to variables.py"
+        sed -i "s/'user_agent': '--user-agent=Mozilla\/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/116.0.0.0 Safari\/537.36'/'user_agent': '--user-agent=Mozilla\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/116.0.0.0 Safari\/537.36',\n    'disable_blink_features': '--disable-blink-features=AutomationControlled',\n    'excludeSwitches': '--disable-extensions'/" variables.py
+    
+    - name: Run update script
+      env:
+        NAUKRI_EMAIL: ${{ secrets.NAUKRI_EMAIL }}
+        NAUKRI_PASSWORD: ${{ secrets.NAUKRI_PASSWORD }}
+        CI: true
+      run: |
+        # Log trigger event information
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          echo "Manual run triggered. Reason: ${{ github.event.inputs.reason || 'No reason provided' }}"
+        elif [ "${{ github.event_name }}" == "push" ]; then
+          echo "Triggered by push to branch: ${{ github.ref_name }}"
+        else
+          echo "Triggered by scheduled event"
+        fi
+        
+        # Run the main script
+        echo "Running main script..."
+        python resume_headline_sync.py
+    
+    - name: Upload screenshots
+      uses: actions/upload-artifact@v4
+      with:
+        name: naukri-screenshots
+        path: screenshots/
+        retention-days: 5
