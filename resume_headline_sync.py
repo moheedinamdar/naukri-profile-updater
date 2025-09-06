@@ -183,44 +183,68 @@ def update_resume_headline():
         def human_type(element, text):
             for char in text:
                 element.send_keys(char)
-                time.sleep(random.uniform(0.1, 0.3))  # Random delay between keystrokes
+                time.sleep(random.uniform(0.05, 0.15))  # Random delay between keystrokes
                 
-        def move_and_click(element, driver):
-            actions = ActionChains(driver)
-            # Move to a random position first
-            random_x = random.randint(-100, 100)
-            random_y = random.randint(-100, 100)
-            actions.move_by_offset(random_x, random_y)
-            # Then move to the element
-            actions.move_to_element(element)
-            # Add small random offset
-            actions.move_by_offset(random.randint(-5, 5), random.randint(-5, 5))
-            actions.click()
-            actions.perform()
-            time.sleep(random.uniform(0.5, 1.5))
+        def safe_click(element, driver):
+            """Safely click an element with fallback methods"""
+            try:
+                # Scroll element into view first
+                driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
+                time.sleep(0.5)
+                
+                # Try direct click first
+                element.click()
+                time.sleep(random.uniform(0.3, 0.8))
+                logger.info("Direct click successful")
+                
+            except Exception as e:
+                logger.info(f"Direct click failed: {e}, trying alternative methods")
+                try:
+                    # Try JavaScript click
+                    driver.execute_script("arguments[0].click();", element)
+                    time.sleep(random.uniform(0.3, 0.8))
+                    logger.info("JavaScript click successful")
+                    
+                except Exception as e2:
+                    logger.info(f"JavaScript click failed: {e2}, trying ActionChains")
+                    try:
+                        # Try ActionChains with safer movement
+                        actions = ActionChains(driver)
+                        actions.move_to_element(element).click().perform()
+                        time.sleep(random.uniform(0.3, 0.8))
+                        logger.info("ActionChains click successful")
+                        
+                    except Exception as e3:
+                        logger.error(f"All click methods failed: {e3}")
+                        raise e3
             
-        # Simulate human-like login behavior
+        # Simulate human-like login behavior with improved error handling
+        logger.info("Starting login process with human-like behavior")
+        
         username_field = wait.until(EC.presence_of_element_located((By.XPATH, SELECTORS['username_field'])))
         wait.until(EC.element_to_be_clickable((By.XPATH, SELECTORS['username_field'])))
         wait.until(EC.visibility_of(username_field))
         
-        # Move mouse naturally and click
-        move_and_click(username_field, driver)
+        # Safely click and enter username
+        safe_click(username_field, driver)
         username_field.clear()
-        time.sleep(random.uniform(0.5, 1.0))
+        time.sleep(random.uniform(0.3, 0.8))
         human_type(username_field, email)
+        logger.info("Username entered successfully")
         
         # Random delay before moving to password
-        time.sleep(random.uniform(1.0, 2.0))
+        time.sleep(random.uniform(0.8, 1.5))
         
         password_field = wait.until(EC.presence_of_element_located((By.XPATH, SELECTORS['password_field'])))
         wait.until(EC.element_to_be_clickable((By.XPATH, SELECTORS['password_field'])))
         wait.until(EC.visibility_of(password_field))
         
-        move_and_click(password_field, driver)
+        # Safely click and enter password
+        safe_click(password_field, driver)
         password_field.clear()
-        time.sleep(random.uniform(0.5, 1.0))
+        time.sleep(random.uniform(0.3, 0.8))
         human_type(password_field, password)
+        logger.info("Password entered successfully")
         
         # Random delay before clicking login
         time.sleep(random.uniform(1.0, 2.0))
@@ -229,8 +253,9 @@ def update_resume_headline():
         wait.until(EC.element_to_be_clickable((By.XPATH, SELECTORS['login_button'])))
         wait.until(EC.visibility_of(login_button))
         
-        # Move mouse naturally to login button and click
-        move_and_click(login_button, driver)
+        # Safely click login button
+        safe_click(login_button, driver)
+        logger.info("Login button clicked successfully")
         
         # Add random delay after login attempt
         time.sleep(random.uniform(2.0, 4.0))
