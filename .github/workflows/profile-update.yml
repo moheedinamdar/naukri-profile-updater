@@ -1,9 +1,9 @@
 name: Naukri Profile Update
 
 on:
-  schedule:
-    # Runs every weekday (Monday to Friday) at 8:00 AM IST (2:30 AM UTC)
-    - cron: '30 2 * * 1-5'
+  # schedule:
+  #   # Runs every weekday (Monday to Friday) at 8:00 AM IST (2:30 AM UTC)
+  #   - cron: '30 2 * * 1-5'
   push:
     # Run on any push to any branch
     branches:
