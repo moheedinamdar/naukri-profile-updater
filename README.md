@@ -144,3 +144,4 @@ Contributions, issues, and feature requests are welcome! Feel free to check the 
 ## Disclaimer
 
 This tool is for personal use only. Ensure you comply with Naukri.com's terms of service when using automated tools with their platform.
+
